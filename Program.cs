@@ -4,6 +4,12 @@
     using System.Net.Sockets;
     using System.Text;
 
+    internal enum MessageState
+    {
+        EXIT,
+        WRITE,
+        SEND,
+    }
 
     public class Program
     {

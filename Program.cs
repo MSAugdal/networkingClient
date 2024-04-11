@@ -1,25 +1,25 @@
-﻿namespace Networking
-{
-    using System.Net;
-    using System.Net.Sockets;
-    using System.Text;
+﻿using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
 
-    internal enum MessageState
+namespace Application
+{
+    public class Message
     {
-        EXIT,
-        WRITE,
-        SEND,
+        public string? Data { get; set; }
+        public string? Sender { get; set; }
+        public DateTime? Time { get; set; }
     }
 
     public class Program
     {
-        public static async void Main(string[] args)
-        {
+        public static async Task Main(string[] args) {
             /*#####################################
              * Creates a client socket and connects it to an IPEndPoint host
              * Returns the client socket as Task<Socket>
              ######################################*/
-            async Task<Socket> CreateSocket(string host, int port)
+            static async Task<Socket> CreateSocket(string host, int port)
             {
                 IPHostEntry ipHostInfo = await Dns.GetHostEntryAsync(host);
                 IPAddress ipAddress = ipHostInfo.AddressList[0];
@@ -39,7 +39,7 @@
              * Sends a UTF8 byte encoded string through socket
              * Expects <|ACK|> as response
              #####################################*/
-            async Task SendMessageString(Socket socket, string message)
+            static async Task SendMessageString(Socket socket, string message)
             {
                 while (true)
                 {
@@ -47,6 +47,30 @@
                     byte[] messageBytes = Encoding.UTF8.GetBytes($"{message}<|EOM|>");
                     await socket.SendAsync(messageBytes, SocketFlags.None);
                     Console.WriteLine($"Socket client sent message \"{message}\"");
+
+                    //receive ACK / acknowledgment
+                    var rcvBuff = new byte[1024];
+                    var rcv = await socket.ReceiveAsync(rcvBuff, SocketFlags.None);
+                    var rcvResp = Encoding.UTF8.GetString(rcvBuff, 0, rcv);
+                    if (rcvResp == "<|ACK|>")
+                    {
+                        Console.WriteLine($"Socket client received acknowledgment \"{rcvResp}\"");
+                        break;
+                    }
+                }
+            }
+
+            static async Task SendMessageMessage(Socket socket, Message message)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(message));
+                while (true)
+                {
+                    // Sends message json as bytes
+                    byte[] messageBytes = JsonSerializer.SerializeToUtf8Bytes(message);
+                    //byte[] messageBytes = Encoding.UTF8.GetBytes($"{message}<|EOM|>");
+                    await socket.SendAsync(messageBytes, SocketFlags.None);
+                    await socket.SendAsync(Encoding.UTF8.GetBytes("<|EOM|>"), SocketFlags.None);
+                    Console.WriteLine($"Socket client sent message \"{Encoding.UTF8.GetString(messageBytes)}\"");
 
                     //receive ACK / acknowledgment
                     var rcvBuff = new byte[1024];
@@ -84,20 +108,19 @@
                 return message;
             }
 
-            static void UserInputHandler(string userInput)
-            {
-                Console.WriteLine("handled");
-            }
-
-
             Socket client = await CreateSocket(Dns.GetHostName(), 8080);
-            string message = GetUserInput();
+            var message = new Message
+            {
+                Data = "This is a json serialized message",
+                Sender = "Mathias S Augdal",
+                Time = DateTime.Now,
+            };
 
-            await SendMessageString(client, $"{message}<|EOM|>");
+            await SendMessageMessage(client, message);
 
             Console.WriteLine("\nPress enter to continue...\n");
-            while (Console.ReadKey().Key != ConsoleKey.Enter) { }
-            CloseSocket(client);
+                while (Console.ReadKey().Key != ConsoleKey.Enter) { }
+                CloseSocket(client);
         }
     }
 }
